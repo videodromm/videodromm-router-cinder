@@ -11,6 +11,8 @@
 // Spout
 #include "CiSpoutOut.h"
 #include "CiSpoutIn.h"
+// NDI
+#include "CinderNDIReceiver.h"
 // UI
 #define IMGUI_DISABLE_OBSOLETE_FUNCTIONS 1
 #include "VDUI.h"
@@ -55,6 +57,10 @@ private:
 	bool							mFadeInDelay;
 	SpoutOut 						mSpoutOut;
 	SpoutIn							mSpoutIn;
+	// NDI
+	CinderNDIReceiver				mReceiver;
+	string							first = "";
+	long							second = 0;
 	bool							mFlipV;
 	bool							mFlipH;
 	int								xLeft, xRight, yLeft, yRight;
@@ -64,7 +70,8 @@ private:
 
 
 VDRouterApp::VDRouterApp()
-	: mSpoutOut("VDRouter", app::getWindowSize())
+	: mSpoutOut("Router", app::getWindowSize())
+	, mReceiver{}
 {
 	// Settings
 	mVDSettings = VDSettings::create("Router");
@@ -79,6 +86,8 @@ VDRouterApp::VDRouterApp()
 	mFadeInDelay = true;
 	// UI
 	mVDUI = VDUI::create(mVDSettings, mVDSession);
+	// NDI
+	mReceiver.setup();
 	// windows
 	mIsShutDown = false;
 	mFlipV = false;
@@ -126,6 +135,16 @@ void VDRouterApp::update()
 	mVDSession->update();
 	if(mSpoutIn.getSize() != app::getWindowSize()) {
 		//app::setWindowSize(mSpoutIn.getSize());
+	}
+	mReceiver.update();
+	if (mReceiver.isReady()) {
+		int senderIndex = mReceiver.getCurrentSenderIndex();
+		int senderCount = mReceiver.getNumberOfSendersFound();
+		std::string senderName = mReceiver.getCurrentSenderName();
+		getWindow()->setTitle("#" + std::to_string(senderIndex) + "/" + std::to_string(senderCount) + ": " + senderName + " @ " + std::to_string((int)getAverageFps()) + " fps " + first + " - " + std::to_string(second));
+	}
+	else {
+		getWindow()->setTitle(std::to_string((int)getAverageFps()) + " fps connecting...");
 	}
 }
 void VDRouterApp::cleanup()
@@ -225,7 +244,7 @@ void VDRouterApp::draw()
 	gl::setMatricesWindow(mVDSession->getIntUniformValueByIndex(mVDSettings->IOUTW), mVDSession->getIntUniformValueByIndex(mVDSettings->IOUTH), false); 
 
 	mode = mVDSession->getMode();
-	switch (mode)
+	/*switch (mode)
 	{
 	case 1:
 		gl::draw(mVDSession->getMixTexture(), getWindowBounds());
@@ -260,7 +279,7 @@ void VDRouterApp::draw()
 		mSpoutOut.sendTexture(mVDSession->getMixetteTexture());
 		break;
 	} 
-
+	*/
 	
 	//Rectf rectangle = Rectf(mVDSettings->mxLeft, mVDSettings->myLeft, mVDSettings->mxRight, mVDSettings->myRight);
 	//gl::draw(mVDSession->getMixTexture(), rectangle);
@@ -283,7 +302,21 @@ void VDRouterApp::draw()
 	// show the FBO color texture 
 	gl::draw(mVDSession->getHydraTexture(), Rectf(tWidth + margin, tHeight + margin, tWidth * 2 + margin, tHeight * 2 + margin));
 	gl::drawString("Hydra", vec2(toPixels(xLeft + tWidth + margin), toPixels(tHeight * 2 + margin)), Color(1, 1, 1), Font("Verdana", toPixels(16)));
+	if (mReceiver.isReady()) {
+		auto meta = mReceiver.getMetadata();
+		auto ndiTex = mReceiver.getVideoTexture();
 
+		first = meta.first;
+		second = meta.second;
+		if (ndiTex.first) {
+
+			Rectf centeredRect = Rectf(ndiTex.first->getBounds()).getCenteredFit(getWindowBounds(), true);
+			gl::draw(ndiTex.first, centeredRect);
+			/*for (auto &warp : mWarps) {
+				warp->draw(ndiTex.first, ndiTex.first->getBounds());
+			}*/
+		}
+	}
 
 	gl::drawString("irx: " + std::to_string(mVDSession->getFloatUniformValueByName("iResolutionX"))
 		+ " iry: " + std::to_string(mVDSession->getFloatUniformValueByName("iResolutionY"))
@@ -298,7 +331,7 @@ void VDRouterApp::draw()
 		if (mVDUI->isReady()) {
 		}
 	}
-	getWindow()->setTitle(mVDSettings->sFps + " fps VDRouter");
+	//getWindow()->setTitle(mVDSettings->sFps + " fps VDRouter");
 }
 
 void prepareSettings(App::Settings *settings)
